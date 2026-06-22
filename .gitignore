@@ -1,0 +1,42 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.nupkg
+*.snupkg
+
+# Node / Frontend
+node_modules/
+dist/
+.cache/
+.parcel-cache/
+*.local
+
+# Environment
+.env
+.env.*
+!.env.example
+appsettings.Production.json
+appsettings.Local.json
+
+# Database
+*.pgdump
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.idea/
+.vscode/settings.json
+*.swp
+*~
+
+# Test results
+TestResults/
+coverage/
+*.coveragexml

@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-app-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: platform-app-gateway
+  template:
+    metadata:
+      labels:
+        app: platform-app-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: platform-app-gateway:latest
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080

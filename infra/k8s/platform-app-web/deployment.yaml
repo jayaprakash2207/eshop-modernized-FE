@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-app-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: platform-app-web
+  template:
+    metadata:
+      labels:
+        app: platform-app-web
+    spec:
+      containers:
+        - name: web
+          image: platform-app-web:latest
+          ports:
+            - containerPort: 80
