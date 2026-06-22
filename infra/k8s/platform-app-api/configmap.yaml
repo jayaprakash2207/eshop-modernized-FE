@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platform-api-config
+  namespace: platform
+  labels:
+    app: platform-api
+    component: backend
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ASPNETCORE_URLS: "http://+:8080"
+  Jwt__Issuer: "https://platform-api.example.com"
+  Jwt__Audience: "platform-app"
+  Jwt__ExpiryMinutes: "60"
+  Cors__AllowedOrigins: "https://platform.example.com"
+  Persistence__UsePostgres: "true"
+  ConnectionStrings__Postgres: "Host=postgres-svc;Port=5432;Database=platformapp;Username=platform;Password=$(POSTGRES_PASSWORD);Pooling=true;MinPoolSize=2;MaxPoolSize=20"
+  Telemetry__ServiceName: "PlatformApp.Api"
+  Telemetry__OtlpEndpoint: "http://otel-collector-svc:4317"

@@ -3,14 +3,19 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\\PlatformApp.Application\\PlatformApp.Application.csproj" />
-    <ProjectReference Include="..\\PlatformApp.Infrastructure\\PlatformApp.Infrastructure.csproj" />
-    <ProjectReference Include="..\\..\\..\\..\\shared\\Observability\\Observability.csproj" />
-    <ProjectReference Include="..\\..\\..\\..\\shared\\Security\\Security.csproj" />
+    <ProjectReference Include="..\PlatformApp.Application\PlatformApp.Application.csproj" />
+    <ProjectReference Include="..\PlatformApp.Infrastructure\PlatformApp.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Observability\Observability.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Security\Security.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+    <PackageReference Include="MediatR"                                        Version="12.4.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore"                         Version="6.9.0" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks"  Version="9.0.0" />
   </ItemGroup>
 </Project>
