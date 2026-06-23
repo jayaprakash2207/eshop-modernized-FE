@@ -8,4 +8,6 @@ public record RegisterCommand(string Username, string Email, string Password) : 
 
 public record ChangePasswordCommand(Guid UserId, string CurrentPassword, string NewPassword) : IRequest<bool>;
 
-public record RefreshTokenCommand(string RefreshToken) : IRequest<AuthenticateResponse?>;
+// NOTE: RefreshTokenCommand intentionally omitted until the refresh-token flow
+// (issue + rotate + revoke) is implemented in Wave 1. Declaring a command with no
+// handler would throw at runtime. See docs/GAP_ANALYSIS.md P2 item 11.

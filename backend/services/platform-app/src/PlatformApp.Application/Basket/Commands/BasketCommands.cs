@@ -2,11 +2,17 @@ using MediatR;
 
 namespace PlatformApp.Application.Basket.Commands;
 
-public record AddBasketItemCommand(Guid UserId, Guid CatalogItemId, int Quantity) : IRequest<BasketResponse>;
+public record AddBasketItemCommand(Guid BuyerId, Guid CatalogItemId, int Quantity) : IRequest<BasketDto>;
 
-public record UpdateBasketItemCommand(Guid UserId, Guid CatalogItemId, int Quantity) : IRequest<BasketResponse>;
+public record UpdateBasketItemCommand(Guid BuyerId, Guid CatalogItemId, int Quantity) : IRequest<BasketDto>;
 
-public record RemoveBasketItemCommand(Guid UserId, Guid CatalogItemId) : IRequest<BasketResponse>;
+public record RemoveBasketItemCommand(Guid BuyerId, Guid CatalogItemId) : IRequest<BasketDto>;
 
-public record CheckoutBasketCommand(Guid UserId, string Username, string ShipToAddress, string City, string State, string ZipCode, string Country)
-    : IRequest<CheckoutResult>;
+public record CheckoutBasketCommand(
+    Guid BuyerId,
+    string Username,
+    string Street,
+    string City,
+    string State,
+    string PostalCode,
+    string Country) : IRequest<CheckoutResult>;

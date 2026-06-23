@@ -4,39 +4,14 @@ using PlatformApp.Domain.Catalog;
 
 namespace PlatformApp.Application.Catalog.Handlers;
 
-public sealed class CreateCatalogItemHandler : IRequestHandler<CreateCatalogItemCommand, CatalogItemResponse>
+public sealed class CreateCatalogItemHandler : IRequestHandler<CreateCatalogItemCommand, CatalogItem>
 {
-    private readonly ICatalogRepository _repository;
+    private readonly CatalogService _service;
 
-    public CreateCatalogItemHandler(ICatalogRepository repository) => _repository = repository;
+    public CreateCatalogItemHandler(CatalogService service) => _service = service;
 
-    public async Task<CatalogItemResponse> Handle(CreateCatalogItemCommand request, CancellationToken cancellationToken)
+    public Task<CatalogItem> Handle(CreateCatalogItemCommand request, CancellationToken cancellationToken)
     {
-        var item = new CatalogItem(
-            Guid.NewGuid(),
-            request.Name,
-            request.Description,
-            request.Price,
-            request.CatalogBrandId,
-            request.CatalogTypeId,
-            request.PictureUri,
-            request.AvailableStock);
-
-        return await _repository.CreateItemAsync(item, cancellationToken);
-    }
-}
-
-public sealed class UpdateCatalogItemHandler : IRequestHandler<UpdateCatalogItemCommand, CatalogItemResponse?>
-{
-    private readonly ICatalogRepository _repository;
-
-    public UpdateCatalogItemHandler(ICatalogRepository repository) => _repository = repository;
-
-    public async Task<CatalogItemResponse?> Handle(UpdateCatalogItemCommand request, CancellationToken cancellationToken)
-    {
-        var existing = await _repository.GetItemByIdAsync(request.ItemId, cancellationToken);
-        if (existing is null) return null;
-
         var upsert = new UpsertCatalogItemRequest(
             request.Name,
             request.Description,
@@ -46,16 +21,37 @@ public sealed class UpdateCatalogItemHandler : IRequestHandler<UpdateCatalogItem
             request.PictureUri,
             request.AvailableStock);
 
-        return await _repository.UpdateItemAsync(request.ItemId, upsert, cancellationToken);
+        return _service.CreateItemAsync(upsert, cancellationToken);
+    }
+}
+
+public sealed class UpdateCatalogItemHandler : IRequestHandler<UpdateCatalogItemCommand, CatalogItem?>
+{
+    private readonly CatalogService _service;
+
+    public UpdateCatalogItemHandler(CatalogService service) => _service = service;
+
+    public Task<CatalogItem?> Handle(UpdateCatalogItemCommand request, CancellationToken cancellationToken)
+    {
+        var upsert = new UpsertCatalogItemRequest(
+            request.Name,
+            request.Description,
+            request.Price,
+            request.CatalogBrandId,
+            request.CatalogTypeId,
+            request.PictureUri,
+            request.AvailableStock);
+
+        return _service.UpdateItemAsync(request.ItemId, upsert, cancellationToken);
     }
 }
 
 public sealed class DeleteCatalogItemHandler : IRequestHandler<DeleteCatalogItemCommand, bool>
 {
-    private readonly ICatalogRepository _repository;
+    private readonly CatalogService _service;
 
-    public DeleteCatalogItemHandler(ICatalogRepository repository) => _repository = repository;
+    public DeleteCatalogItemHandler(CatalogService service) => _service = service;
 
     public Task<bool> Handle(DeleteCatalogItemCommand request, CancellationToken cancellationToken)
-        => _repository.DeleteItemAsync(request.ItemId, cancellationToken);
+        => _service.DeleteItemAsync(request.ItemId, cancellationToken);
 }

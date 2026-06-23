@@ -5,43 +5,43 @@ namespace PlatformApp.Application.Catalog.Handlers;
 
 public sealed class GetCatalogItemsHandler : IRequestHandler<GetCatalogItemsQuery, CatalogItemsResponse>
 {
-    private readonly ICatalogRepository _repository;
+    private readonly CatalogService _service;
 
-    public GetCatalogItemsHandler(ICatalogRepository repository) => _repository = repository;
+    public GetCatalogItemsHandler(CatalogService service) => _service = service;
 
-    public async Task<CatalogItemsResponse> Handle(GetCatalogItemsQuery request, CancellationToken cancellationToken)
+    public Task<CatalogItemsResponse> Handle(GetCatalogItemsQuery request, CancellationToken cancellationToken)
     {
         var query = new CatalogItemsQuery(request.PageIndex, request.PageSize, request.BrandId, request.TypeId);
-        return await _repository.GetItemsPagedAsync(query, cancellationToken);
+        return _service.GetItemsAsync(query, cancellationToken);
     }
 }
 
-public sealed class GetCatalogItemByIdHandler : IRequestHandler<GetCatalogItemByIdQuery, CatalogItemResponse?>
+public sealed class GetCatalogItemByIdHandler : IRequestHandler<GetCatalogItemByIdQuery, CatalogItemDto?>
 {
-    private readonly ICatalogRepository _repository;
+    private readonly CatalogService _service;
 
-    public GetCatalogItemByIdHandler(ICatalogRepository repository) => _repository = repository;
+    public GetCatalogItemByIdHandler(CatalogService service) => _service = service;
 
-    public Task<CatalogItemResponse?> Handle(GetCatalogItemByIdQuery request, CancellationToken cancellationToken)
-        => _repository.GetItemByIdAsync(request.ItemId, cancellationToken);
+    public Task<CatalogItemDto?> Handle(GetCatalogItemByIdQuery request, CancellationToken cancellationToken)
+        => _service.GetItemAsync(request.ItemId, cancellationToken);
 }
 
-public sealed class GetCatalogBrandsHandler : IRequestHandler<GetCatalogBrandsQuery, IReadOnlyList<CatalogBrandResponse>>
+public sealed class GetCatalogBrandsHandler : IRequestHandler<GetCatalogBrandsQuery, IReadOnlyCollection<CatalogBrandDto>>
 {
-    private readonly ICatalogRepository _repository;
+    private readonly CatalogService _service;
 
-    public GetCatalogBrandsHandler(ICatalogRepository repository) => _repository = repository;
+    public GetCatalogBrandsHandler(CatalogService service) => _service = service;
 
-    public Task<IReadOnlyList<CatalogBrandResponse>> Handle(GetCatalogBrandsQuery request, CancellationToken cancellationToken)
-        => _repository.GetBrandsAsync(cancellationToken);
+    public Task<IReadOnlyCollection<CatalogBrandDto>> Handle(GetCatalogBrandsQuery request, CancellationToken cancellationToken)
+        => _service.GetBrandsAsync(cancellationToken);
 }
 
-public sealed class GetCatalogTypesHandler : IRequestHandler<GetCatalogTypesQuery, IReadOnlyList<CatalogTypeResponse>>
+public sealed class GetCatalogTypesHandler : IRequestHandler<GetCatalogTypesQuery, IReadOnlyCollection<CatalogTypeDto>>
 {
-    private readonly ICatalogRepository _repository;
+    private readonly CatalogService _service;
 
-    public GetCatalogTypesHandler(ICatalogRepository repository) => _repository = repository;
+    public GetCatalogTypesHandler(CatalogService service) => _service = service;
 
-    public Task<IReadOnlyList<CatalogTypeResponse>> Handle(GetCatalogTypesQuery request, CancellationToken cancellationToken)
-        => _repository.GetTypesAsync(cancellationToken);
+    public Task<IReadOnlyCollection<CatalogTypeDto>> Handle(GetCatalogTypesQuery request, CancellationToken cancellationToken)
+        => _service.GetTypesAsync(cancellationToken);
 }

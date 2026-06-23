@@ -1,5 +1,5 @@
 using MediatR;
-using PlatformApp.Application.Catalog;
+using PlatformApp.Domain.Catalog;
 
 namespace PlatformApp.Application.Catalog.Commands;
 
@@ -10,7 +10,7 @@ public record CreateCatalogItemCommand(
     Guid CatalogBrandId,
     Guid CatalogTypeId,
     string PictureUri,
-    int AvailableStock) : IRequest<CatalogItemResponse>;
+    int AvailableStock) : IRequest<CatalogItem>;
 
 public record UpdateCatalogItemCommand(
     Guid ItemId,
@@ -20,6 +20,6 @@ public record UpdateCatalogItemCommand(
     Guid CatalogBrandId,
     Guid CatalogTypeId,
     string PictureUri,
-    int AvailableStock) : IRequest<CatalogItemResponse?>;
+    int AvailableStock) : IRequest<CatalogItem?>;
 
 public record DeleteCatalogItemCommand(Guid ItemId) : IRequest<bool>;

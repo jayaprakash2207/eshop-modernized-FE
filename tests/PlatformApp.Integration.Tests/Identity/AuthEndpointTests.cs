@@ -60,7 +60,7 @@ public sealed class AuthEndpointTests : IClassFixture<PlatformAppFactory>
         authResp.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await authResp.Content.ReadFromJsonAsync<Dictionary<string, object>>();
-        body.Should().ContainKey("token");
+        body.Should().ContainKey("accessToken");
     }
 
     [Fact]

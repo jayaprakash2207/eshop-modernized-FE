@@ -2,6 +2,6 @@ using MediatR;
 
 namespace PlatformApp.Application.Orders.Queries;
 
-public record GetMyOrdersQuery(Guid UserId) : IRequest<IReadOnlyList<OrderSummaryResponse>>;
+public record GetMyOrdersQuery(Guid BuyerId) : IRequest<IReadOnlyCollection<OrderSummaryDto>>;
 
-public record GetOrderDetailQuery(Guid UserId, Guid OrderId) : IRequest<OrderDetailResponse?>;
+public record GetOrderDetailQuery(Guid BuyerId, Guid OrderId) : IRequest<OrderDetailDto?>;
