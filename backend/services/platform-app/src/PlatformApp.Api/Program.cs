@@ -1,6 +1,8 @@
 using System.Text;
 using System.Security.Claims;
 using System.Reflection;
+using FluentValidation;
+using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +12,8 @@ using Microsoft.OpenApi.Models;
 using Observability;
 using PlatformApp.Application.Basket;
 using PlatformApp.Application.Catalog;
+using PlatformApp.Application.Catalog.Commands;
+using PlatformApp.Application.Catalog.Queries;
 using PlatformApp.Application.Identity;
 using PlatformApp.Application.Orders;
 using PlatformApp.Application.Payments;
@@ -24,14 +28,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddProblemDetails();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<ICurrentUserAccessor, HttpCurrentUserAccessor>();
-builder.Services.AddPlatformTelemetry("PlatformApp.Api");
+builder.Services.AddPlatformTelemetry("PlatformApp.Api", builder.Configuration);
 
-// ── MediatR (CQRS) ─────────────────────────────────────────────────────────────
+// ── MediatR (CQRS) + FluentValidation pipeline ─────────────────────────────────
+var applicationAssembly = typeof(PlatformApp.Application.Catalog.Handlers.GetCatalogItemsHandler).Assembly;
 builder.Services.AddMediatR(cfg =>
 {
-    cfg.RegisterServicesFromAssembly(
-        typeof(PlatformApp.Application.Catalog.Handlers.GetCatalogItemsHandler).Assembly);
+    cfg.RegisterServicesFromAssembly(applicationAssembly);
+    cfg.AddOpenBehavior(typeof(PlatformApp.Application.Common.ValidationBehavior<,>));
 });
+builder.Services.AddValidatorsFromAssembly(applicationAssembly);
 
 // ── Application services ───────────────────────────────────────────────────────
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -53,25 +59,49 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod());
 });
 
-// ── JWT authentication ─────────────────────────────────────────────────────────
+// ── Authentication ───────────────────────────────────────────────────────────
+// Two modes:
+//   1. OIDC mode  — when Oidc:Authority is set, validate tokens against an external
+//      identity provider (Keycloak / Azure AD B2C). KG target: "OAuth2 + OIDC".
+//   2. Local mode — otherwise validate the locally-issued symmetric-key JWT.
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 var signingKey = Encoding.UTF8.GetBytes(jwtOptions.SigningKey);
+var oidcAuthority = builder.Configuration.GetSection("Oidc")["Authority"];
+var oidcAudience  = builder.Configuration.GetSection("Oidc")["Audience"];
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.TokenValidationParameters = new TokenValidationParameters
+        if (!string.IsNullOrWhiteSpace(oidcAuthority))
         {
-            ValidateIssuer            = true,
-            ValidateAudience          = true,
-            ValidateIssuerSigningKey  = true,
-            ValidateLifetime          = true,
-            ValidIssuer               = jwtOptions.Issuer,
-            ValidAudience             = jwtOptions.Audience,
-            IssuerSigningKey          = new SymmetricSecurityKey(signingKey),
-            ClockSkew                 = TimeSpan.FromMinutes(1)
-        };
+            // OIDC: discover signing keys from the provider's /.well-known endpoint.
+            options.Authority = oidcAuthority;
+            options.Audience  = oidcAudience ?? jwtOptions.Audience;
+            options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer           = true,
+                ValidateAudience         = true,
+                ValidateLifetime         = true,
+                ValidateIssuerSigningKey = true,
+                ClockSkew                = TimeSpan.FromMinutes(1)
+            };
+        }
+        else
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer            = true,
+                ValidateAudience          = true,
+                ValidateIssuerSigningKey  = true,
+                ValidateLifetime          = true,
+                ValidIssuer               = jwtOptions.Issuer,
+                ValidAudience             = jwtOptions.Audience,
+                IssuerSigningKey          = new SymmetricSecurityKey(signingKey),
+                ClockSkew                 = TimeSpan.FromMinutes(1)
+            };
+        }
     });
 
 builder.Services.AddAuthorization(options =>
@@ -80,6 +110,14 @@ builder.Services.AddAuthorization(options =>
 // ── Health checks ──────────────────────────────────────────────────────────────
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy("API is running"), ["live"]);
+
+// ── GraphQL (HotChocolate) ─────────────────────────────────────────────────────
+builder.Services
+    .AddGraphQLServer()
+    .AddQueryType<PlatformApp.Api.GraphQL.Query>();
+
+// ── gRPC (service-to-service) ──────────────────────────────────────────────────
+builder.Services.AddGrpc();
 
 // ── Swagger / OpenAPI (v1) ─────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
@@ -135,6 +173,9 @@ if (app.Environment.IsDevelopment())
 app.UseCors("frontend");
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Prometheus metrics scrape endpoint (/metrics)
+app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
 // ── Health endpoints ───────────────────────────────────────────────────────────
 app.MapHealthChecks("/api_health_check", new HealthCheckOptions
@@ -194,49 +235,80 @@ app.MapPost("/api/v1/Account/Register", async (
 .WithTags("Identity")
 .WithOpenApi();
 
+/// <summary>Exchange a valid refresh token for a new access+refresh pair (rotation).</summary>
+app.MapPost("/api/v1/token/refresh", async (
+    [FromBody] RefreshTokenRequest request,
+    IRefreshTokenService refreshTokens,
+    CancellationToken cancellationToken) =>
+{
+    var response = await refreshTokens.RefreshAsync(request.RefreshToken, cancellationToken);
+    return response is null ? Results.Unauthorized() : Results.Ok(response);
+})
+.WithName("RefreshToken")
+.WithTags("Identity")
+.WithOpenApi();
+
+/// <summary>Revoke a refresh token (logout / security event).</summary>
+app.MapPost("/api/v1/token/revoke", async (
+    [FromBody] RevokeTokenRequest request,
+    IRefreshTokenService refreshTokens,
+    CancellationToken cancellationToken) =>
+{
+    await refreshTokens.RevokeAsync(request.RefreshToken, cancellationToken);
+    return Results.Ok(new AccountStatusResponse("Refresh token revoked."));
+})
+.RequireAuthorization()
+.WithName("RevokeToken")
+.WithTags("Identity")
+.WithOpenApi();
+
 app.MapGet("/Account/Login",  () => Results.Ok(new AccountStatusResponse("Use POST /api/v1/authenticate to sign in."))).WithTags("Identity");
 app.MapGet("/Account/Logout", () => Results.Ok(new AccountStatusResponse("Use POST /api/v1/User/Logout to sign out."))).WithTags("Identity");
 
 app.MapGet("/Account/ConfirmEmail", async ([FromQuery] string username, IIdentityAccountService svc, CancellationToken ct) =>
     Results.Ok(await svc.ConfirmEmailAsync(username, ct))).WithTags("Identity");
 
-// ── Catalog endpoints (v1) ─────────────────────────────────────────────────────
-app.MapGet("/api/v1/catalog-brands", async (CatalogService svc, CancellationToken ct) =>
-    Results.Ok(await svc.GetBrandsAsync(ct)))
+// ── Catalog endpoints (v1) — dispatched through MediatR CQRS handlers ──────────
+app.MapGet("/api/v1/catalog-brands", async (ISender sender, CancellationToken ct) =>
+    Results.Ok(await sender.Send(new GetCatalogBrandsQuery(), ct)))
     .WithName("GetCatalogBrands").WithTags("Catalog").WithOpenApi();
 
-app.MapGet("/api/v1/catalog-types", async (CatalogService svc, CancellationToken ct) =>
-    Results.Ok(await svc.GetTypesAsync(ct)))
+app.MapGet("/api/v1/catalog-types", async (ISender sender, CancellationToken ct) =>
+    Results.Ok(await sender.Send(new GetCatalogTypesQuery(), ct)))
     .WithName("GetCatalogTypes").WithTags("Catalog").WithOpenApi();
 
-app.MapGet("/api/v1/catalog-items", async ([AsParameters] CatalogItemsQuery query, CatalogService svc, CancellationToken ct) =>
-    Results.Ok(await svc.GetItemsAsync(query, ct)))
+app.MapGet("/api/v1/catalog-items", async ([AsParameters] CatalogItemsQuery query, ISender sender, CancellationToken ct) =>
+    Results.Ok(await sender.Send(new GetCatalogItemsQuery(query.PageIndex, query.PageSize, query.CatalogBrandId, query.CatalogTypeId), ct)))
     .WithName("GetCatalogItems").WithTags("Catalog").WithOpenApi();
 
-app.MapGet("/api/v1/catalog-items/{catalogItemId:guid}", async (Guid catalogItemId, CatalogService svc, CancellationToken ct) =>
+app.MapGet("/api/v1/catalog-items/{catalogItemId:guid}", async (Guid catalogItemId, ISender sender, CancellationToken ct) =>
 {
-    var item = await svc.GetItemAsync(catalogItemId, ct);
+    var item = await sender.Send(new GetCatalogItemByIdQuery(catalogItemId), ct);
     return item is null ? Results.NotFound() : Results.Ok(item);
 })
 .WithName("GetCatalogItemById").WithTags("Catalog").WithOpenApi();
 
-app.MapPost("/api/v1/catalog-items", async ([FromBody] UpsertCatalogItemRequest request, CatalogService svc, CancellationToken ct) =>
+app.MapPost("/api/v1/catalog-items", async ([FromBody] UpsertCatalogItemRequest request, ISender sender, CancellationToken ct) =>
 {
-    var item = await svc.CreateItemAsync(request, ct);
+    var item = await sender.Send(new CreateCatalogItemCommand(
+        request.Name, request.Description, request.Price,
+        request.CatalogBrandId, request.CatalogTypeId, request.PictureUri, request.AvailableStock), ct);
     return Results.Created($"/api/v1/catalog-items/{item.Id}", new { item.Id });
 })
 .RequireAuthorization("AdminOnly").WithName("CreateCatalogItem").WithTags("Catalog").WithOpenApi();
 
-app.MapPut("/api/v1/catalog-items/{catalogItemId:guid}", async (Guid catalogItemId, [FromBody] UpsertCatalogItemRequest request, CatalogService svc, CancellationToken ct) =>
+app.MapPut("/api/v1/catalog-items/{catalogItemId:guid}", async (Guid catalogItemId, [FromBody] UpsertCatalogItemRequest request, ISender sender, CancellationToken ct) =>
 {
-    var item = await svc.UpdateItemAsync(catalogItemId, request, ct);
+    var item = await sender.Send(new UpdateCatalogItemCommand(
+        catalogItemId, request.Name, request.Description, request.Price,
+        request.CatalogBrandId, request.CatalogTypeId, request.PictureUri, request.AvailableStock), ct);
     return item is null ? Results.NotFound() : Results.NoContent();
 })
 .RequireAuthorization("AdminOnly").WithName("UpdateCatalogItem").WithTags("Catalog").WithOpenApi();
 
-app.MapDelete("/api/v1/catalog-items/{catalogItemId:guid}", async (Guid catalogItemId, CatalogService svc, CancellationToken ct) =>
+app.MapDelete("/api/v1/catalog-items/{catalogItemId:guid}", async (Guid catalogItemId, ISender sender, CancellationToken ct) =>
 {
-    var deleted = await svc.DeleteItemAsync(catalogItemId, ct);
+    var deleted = await sender.Send(new DeleteCatalogItemCommand(catalogItemId), ct);
     return deleted ? Results.NoContent() : Results.NotFound();
 })
 .RequireAuthorization("AdminOnly").WithName("DeleteCatalogItem").WithTags("Catalog").WithOpenApi();
@@ -376,6 +448,20 @@ app.MapGet("/api/v1/admin/catalog/{catalogItemId:guid}", async (Guid catalogItem
 app.MapGet("/Admin",             async (CatalogService s, CancellationToken ct) => { var c = await s.GetItemsAsync(new CatalogItemsQuery(0, 50), ct); return Results.Ok(new { title = "Admin Dashboard", c.totalCount, c.items }); }).RequireAuthorization("AdminOnly").WithTags("Admin (legacy)");
 app.MapGet("/Admin/EditCatalogItem", async ([FromQuery] Guid catalogItemId, CatalogService s, CancellationToken ct) => { var i = await s.GetItemAsync(catalogItemId, ct); return i is null ? Results.NotFound() : Results.Ok(i); }).RequireAuthorization("AdminOnly").WithTags("Admin (legacy)");
 
+// ── Static content endpoints (legacy INT-047 etc.) ─────────────────────────────
+app.MapGet("/Privacy", () => Results.Ok(new
+{
+    title = "Privacy Policy",
+    body  = "PlatformApp processes personal data in accordance with applicable data-protection law. "
+          + "See the deployed privacy notice for the authoritative policy."
+})).WithTags("Static").WithOpenApi();
+
+app.MapGet("/api/v1/privacy", () => Results.Ok(new
+{
+    title = "Privacy Policy",
+    body  = "PlatformApp processes personal data in accordance with applicable data-protection law."
+})).WithTags("Static").WithOpenApi();
+
 // ── Payment endpoints ──────────────────────────────────────────────────────────
 app.MapPost("/api/v1/payments", async ([FromBody] PaymentRequest req, IPaymentService svc, CancellationToken ct) =>
     Results.Ok(await svc.ProcessAsync(req, ct)))
@@ -384,6 +470,12 @@ app.MapPost("/api/v1/payments", async ([FromBody] PaymentRequest req, IPaymentSe
 // Legacy payment route
 app.MapPost("/api/payments", async ([FromBody] PaymentRequest r, IPaymentService s, CancellationToken ct) =>
     Results.Ok(await s.ProcessAsync(r, ct))).RequireAuthorization().WithTags("Payments (legacy)");
+
+// ── GraphQL endpoint ───────────────────────────────────────────────────────────
+app.MapGraphQL("/graphql");
+
+// ── gRPC endpoint ──────────────────────────────────────────────────────────────
+app.MapGrpcService<PlatformApp.Api.Grpc.CatalogGrpcService>();
 
 app.Run();
 

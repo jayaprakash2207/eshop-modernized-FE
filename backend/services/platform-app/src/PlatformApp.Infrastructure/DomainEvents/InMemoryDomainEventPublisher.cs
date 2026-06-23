@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging;
-using PlatformApp.Infrastructure.DomainEvents;
+using PlatformApp.Application.Abstractions;
 
 namespace PlatformApp.Infrastructure.DomainEvents;
 

@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+option csharp_namespace = "PlatformApp.Api.Grpc";
+
+package catalog;
+
+// Internal gRPC contract for service-to-service catalog reads.
+// KG target stack: "gRPC". Intended for east-west traffic between extracted
+// microservices (mTLS via service mesh), not for public browser clients.
+service CatalogGrpc {
+  rpc GetItemById (GetItemByIdRequest) returns (CatalogItemMessage);
+  rpc GetBrands (GetBrandsRequest) returns (BrandListMessage);
+}
+
+message GetItemByIdRequest {
+  string item_id = 1;
+}
+
+message GetBrandsRequest {}
+
+message CatalogItemMessage {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  double price = 4;
+  string brand = 5;
+  string type = 6;
+  int32 available_stock = 7;
+}
+
+message BrandMessage {
+  string id = 1;
+  string name = 2;
+}
+
+message BrandListMessage {
+  repeated BrandMessage brands = 1;
+}

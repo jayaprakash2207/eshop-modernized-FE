@@ -1,7 +1,9 @@
+using MediatR;
 using PlatformApp.Application.Catalog;
 using PlatformApp.Domain.Basket;
 using PlatformApp.Domain.Orders;
 using PlatformApp.Application.Orders;
+using PlatformApp.Application.Orders.Events;
 
 namespace PlatformApp.Application.Basket;
 
@@ -10,15 +12,18 @@ public sealed class BasketService
     private readonly IBasketRepository _basketRepository;
     private readonly ICatalogRepository _catalogRepository;
     private readonly IOrderRepository _orderRepository;
+    private readonly IPublisher _publisher;
 
     public BasketService(
         IBasketRepository basketRepository,
         ICatalogRepository catalogRepository,
-        IOrderRepository orderRepository)
+        IOrderRepository orderRepository,
+        IPublisher publisher)
     {
         _basketRepository = basketRepository;
         _catalogRepository = catalogRepository;
         _orderRepository = orderRepository;
+        _publisher = publisher;
     }
 
     public async Task<BasketDto> GetAsync(Guid buyerId, CancellationToken cancellationToken)
@@ -104,6 +109,12 @@ public sealed class BasketService
         await _orderRepository.SaveAsync(order, cancellationToken);
         basket.Clear();
         await _basketRepository.SaveAsync(basket, cancellationToken);
+
+        // Raise OrderPlaced — the Loyalty context consumes this to award points.
+        // SourceEventId = order id makes the downstream earn idempotent.
+        await _publisher.Publish(
+            new OrderPlacedNotification(order.Id, buyerId, order.Total, order.Id.ToString()),
+            cancellationToken);
 
         return new CheckoutResult(order.Id, order.OrderNumber, order.Total, "/Basket/Success");
     }

@@ -1,0 +1,65 @@
+# Default values for platform-app.
+
+api:
+  image:
+    repository: ghcr.io/jayaprakash2207/eshop-modernized-fe/platform-api
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  containerPort: 8080
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  env:
+    ASPNETCORE_ENVIRONMENT: Production
+    Persistence__Provider: PostgreSql
+
+web:
+  image:
+    repository: ghcr.io/jayaprakash2207/eshop-modernized-fe/platform-web
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  containerPort: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  host: platform.example.com
+  tls:
+    enabled: true
+    secretName: platform-tls
+
+# Bitnami subchart toggles — set false to use external managed services
+postgresql:
+  enabled: true
+  auth:
+    database: platformapp
+    username: platformapp
+
+redis:
+  enabled: true
+  architecture: standalone
+
+rabbitmq:
+  enabled: true
+  auth:
+    username: guest
+
+serviceMesh:
+  istioInjection: false
+
+secrets:
+  # Provide via --set or a SealedSecret; never commit real values.
+  jwtSigningKey: ""
+  postgresPassword: ""

@@ -1,3 +1,4 @@
+using PlatformApp.Application.Abstractions;
 using PlatformApp.Domain.Loyalty;
 
 namespace PlatformApp.Application.Loyalty;
@@ -5,9 +6,9 @@ namespace PlatformApp.Application.Loyalty;
 public sealed class LoyaltyService : ILoyaltyService
 {
     private readonly ILoyaltyRepository _repository;
-    private readonly PlatformApp.Infrastructure.DomainEvents.IDomainEventPublisher _publisher;
+    private readonly IDomainEventPublisher _publisher;
 
-    public LoyaltyService(ILoyaltyRepository repository, PlatformApp.Infrastructure.DomainEvents.IDomainEventPublisher publisher)
+    public LoyaltyService(ILoyaltyRepository repository, IDomainEventPublisher publisher)
     {
         _repository = repository;
         _publisher = publisher;
